@@ -8,6 +8,11 @@ void setup() {
   delay(100);
   Serial.println("\n=== WiFiThing skeleton starting ===");
   wifi.begin();
+
+  wifi.saveCredentials("TestSSID", "TestPassword");
+  wifi.loadCredentials();
+
+  wifi.printCredentials();
 }
 
 void loop() {
