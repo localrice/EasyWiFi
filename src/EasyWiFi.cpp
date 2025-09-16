@@ -1,7 +1,33 @@
 #include "EasyWiFi.h"
 
-EasyWiFi::EasyWiFi() {}
+ESP8266WebServer server(80);
 
+EasyWiFi::EasyWiFi() {}
+/*
+  EasyWiFi Logic Flow:
+
+  1. begin()
+     - Mounts LittleFS.
+     - Loads saved WiFi credentials.
+     - Attempts to connect to WiFi.
+     - If no credentials or connection fails, starts the configuration portal.
+
+  2. loop()
+     - If the configuration portal is active, handles incoming web requests.
+
+  3. reset()
+     - Removes saved WiFi credentials from LittleFS.
+     - Clears ssid and password variables.
+
+  4. saveCredentials()
+     - Saves the provided SSID and password to LittleFS.
+
+  5. loadCredentials()
+     - Loads SSID and password from LittleFS.
+
+  6. printCredentials()
+     - Prints the current SSID and password to Serial.
+*/
 void EasyWiFi::begin() {
   Serial.println("EasyWiFi: begin()");
   if (!LittleFS.begin()) {
@@ -31,15 +57,62 @@ void EasyWiFi::tryConnect() {
     startPortal();
     return;
   }
-}
+  Serial.printf("Attempting to connect to SSID: %s\n", ssid.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
+  unsigned long startAttemptTime = millis();
+  const unsigned long timeout = 10000; // 10 seconds timeout
 
+  while ((WiFi.status() != WL_CONNECTED) && (millis() - startAttemptTime < timeout)) {
+    delay(100);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\nConnected! IP address: %s\n", WiFi.localIP().toString().c_str());
+    portalActive = false;
+  } else {
+    Serial.println("\nFailed to connect, starting portal");
+    startPortal();
+  }
+}
 void EasyWiFi::startPortal() {
-  Serial.println("EasyWiFi: startPortal() (stub)");
+  Serial.println("EasyWiFi: startPortal()");
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("EasyWiFi-Setup");
+
+  server.on("/", [this]() {
+      String html = "<h1>EasyWiFi Setup</h1>"
+                  "<form method='POST' action='/save'>"
+                  "SSID: <input name='ssid'><br>"
+                  "Password: <input type='password' name='password'><br>"
+                  "<input type='submit' value='Save'>"
+                  "</form>";
+    server.send(200, "text/html", html);
+  });
+  
+  server.on("/save", HTTP_POST, [this]() {
+    String newSsid = server.arg("ssid");
+    String newPassword = server.arg("password");
+
+    if (newSsid.length() > 0) {
+      saveCredentials(newSsid.c_str(), newPassword.c_str());
+      server.send(200, "text/html", "<h1>Credentials Saved. Rebooting...</h1>");
+      delay(2000);
+      ESP.restart();
+    } else {
+      server.send(400, "text/html", "<h1>SSID cannot be empty</h1>");
+    }
+  });
+  
+  server.begin();
   portalActive = true;
+
+  Serial.printf("Portal active. Connect to WiFi 'EasyWiFi_Setup' and visit http://%s/\n",
+                WiFi.softAPIP().toString().c_str()); 
 }
 
 void EasyWiFi::handleClient() {
     // placeholder — will handle web requests later
+    server.handleClient();
 }
 
 void EasyWiFi::saveCredentials(const char* ssid, const char* password) {
