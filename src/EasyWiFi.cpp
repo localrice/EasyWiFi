@@ -82,8 +82,8 @@ void EasyWiFi::startPortal() {
   server.on("/", [this]() {
       String html = "<h1>EasyWiFi Setup</h1>"
                   "<form method='POST' action='/save'>"
-                  "SSID: <input name='ssid'><br>"
-                  "Password: <input type='password' name='password'><br>"
+                  "SSID: <input name='ssid' value='" + ssid + "'><br>"
+                  "Password: <input type='password' name='password' value='" + password +"'><br>"
                   "<input type='submit' value='Save'>"
                   "</form>";
     server.send(200, "text/html", html);
