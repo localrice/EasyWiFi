@@ -1,6 +1,8 @@
 #include "EasyWiFi.h"
 
 ESP8266WebServer server(80);
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
 
 EasyWiFi::EasyWiFi() {}
 /*
@@ -40,6 +42,7 @@ void EasyWiFi::begin() {
 
 void EasyWiFi::loop() {
   if (portalActive) {
+    dnsServer.processNextRequest();
     handleClient();
   }
 }
@@ -79,6 +82,9 @@ void EasyWiFi::startPortal() {
   WiFi.mode(WIFI_AP);
   WiFi.softAP("EasyWiFi-Setup");
 
+  // start DNS server: redirect all domains to our ESP's AP IP
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+  
   server.on("/", [this]() {
       String html = "<h1>EasyWiFi Setup</h1>"
                   "<form method='POST' action='/save'>"
@@ -89,6 +95,7 @@ void EasyWiFi::startPortal() {
     server.send(200, "text/html", html);
   });
   
+  // Handle form submission
   server.on("/save", HTTP_POST, [this]() {
     String newSsid = server.arg("ssid");
     String newPassword = server.arg("password");
@@ -103,6 +110,30 @@ void EasyWiFi::startPortal() {
     }
   });
   
+  // Captive portal detection endpoints → redirect to "/"
+  server.on("/generate_204", []() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+  });
+  server.on("/fwlink", []() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+  });
+  server.on("/hotspot-detect.html", []() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+  });
+  server.on("/ncsi.txt", []() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+  });
+
+  // Catch-all → redirect to "/"
+  server.onNotFound([]() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+  });
+
   server.begin();
   portalActive = true;
 
