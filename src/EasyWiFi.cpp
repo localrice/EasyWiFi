@@ -86,14 +86,53 @@ void EasyWiFi::startPortal() {
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
   
   server.on("/", [this]() {
-      String html = "<h1>EasyWiFi Setup</h1>"
-                  "<form method='POST' action='/save'>"
-                  "SSID: <input name='ssid' value='" + ssid + "'><br>"
-                  "Password: <input type='password' name='password' value='" + password +"'><br>"
-                  "<input type='submit' value='Save'>"
-                  "</form>";
-    server.send(200, "text/html", html);
-  });
+  String html = R"rawliteral(
+    <html>
+    <head>
+      <title>EasyWiFi Setup</title>
+    </head>
+    <body>
+      <h1>EasyWiFi Setup</h1>
+      
+      <form method='POST' action='/save'>
+        SSID: <input id='ssid' name='ssid'><br>
+        Password: <input type='password' name='password'><br>
+        <input type='submit' value='Save'>
+      </form>
+
+      <h2>Available Networks</h2>
+      <button onclick="scan()">Scan Networks</button>
+      <ul id="networks"></ul>
+
+      <script>
+        function scan() {
+          fetch('/scan')
+            .then(response => response.json())
+            .then(data => {
+              let list = document.getElementById('networks');
+              list.innerHTML = '';
+              data.forEach(net => {
+                console.log(net)
+                let item = document.createElement('li');
+                item.textContent = net.ssid + " (" + net.rssi + "dBm)";
+                item.style.cursor = "pointer";
+
+                item.onclick = () => {
+                  document.getElementById('ssid').value = net.ssid;
+                };
+
+                list.appendChild(item);
+              });
+
+          })
+        }
+      </script>
+    </body>
+    </html>
+  )rawliteral";
+  server.send(200, "text/html", html);
+});
+
   
   // Handle form submission
   server.on("/save", HTTP_POST, [this]() {
@@ -110,6 +149,25 @@ void EasyWiFi::startPortal() {
     }
   });
   
+  // Handle scanning for networks
+  server.on("/scan", [this]() {
+    int networks = WiFi.scanNetworks(); // Returns the number of networks found
+    Serial.printf("Scan complete: %d", networks);
+    String json = "[";
+
+    for (int i = 0; i < networks; i++) {
+      if (i > 0) json += ",";
+      json += "{";
+      json += "\"ssid\":\"" + WiFi.SSID(i) + "\","; // SSID
+      json += "\"rssi\":" + String(WiFi.RSSI(i)) + ","; // Signal strength
+      json += "\"encryption\":" + String(WiFi.encryptionType(i)); // Encryption type
+      json += "}";
+    }
+    json += "]";
+
+    server.send(200, "application/json", json);
+  });
+
   // Captive portal detection endpoints → redirect to "/"
   server.on("/generate_204", []() {
     server.sendHeader("Location", "/", true);
