@@ -80,7 +80,15 @@ void EasyWiFi::tryConnect() {
 void EasyWiFi::startPortal() {
   Serial.println("EasyWiFi: startPortal()");
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("EasyWiFi-Setup");
+
+  // WPA2 requires passwords between 8 and 63 characters
+  if (strlen(APPassword) >= 8 && strlen(APPassword) <= 63) {
+    WiFi.softAP(APName, APPassword);
+    Serial.printf("AP started: %s (secured) \n",APName);
+  } else {
+    WiFi.softAP(APName);     // if the password is invalid, start an open AP
+    Serial.printf("AP started: %s (open) \n",APName);
+  }
 
   // start DNS server: redirect all domains to our ESP's AP IP
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
@@ -236,4 +244,9 @@ void EasyWiFi::printCredentials() {
   Serial.println("EasyWiFi: printCredentials()");
   Serial.printf("SSID: %s\n", ssid.c_str());
   Serial.printf("Password: %s\n", password.c_str());
+}
+
+void EasyWiFi::setAP(const char* name, const char* password) {
+  APName = name;
+  APPassword = password;
 }
