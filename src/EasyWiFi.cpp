@@ -204,6 +204,8 @@ void EasyWiFi::startPortal() {
   String cssBlock;
 
   if (userCSS && strlen(userCSS) > 0) {
+    // register the route to serve the user-provided CSS from LittleFS
+    server.serveStatic("/styles.css", LittleFS, userCSS);
     // link the user-provided css
     cssBlock = "<link rel='stylesheet' href='" + String(userCSS) + "'>";
   } else {
