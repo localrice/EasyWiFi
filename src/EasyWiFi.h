@@ -36,6 +36,12 @@ class EasyWiFi {
         // optional css by the user
         const char* userCSS = nullptr;
 
+        // reconnect handler
+        unsigned long lastReconnectAttempt = 0;
+        int reconnectAttempts = 0;
+        const int maxReconnectAttempts = 10; // config it
+        const unsigned long reconnectInterval = 5000; // 5 seconds
+
         void tryConnect();
         void startPortal();
         void handleClient();

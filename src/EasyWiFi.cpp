@@ -152,6 +152,26 @@ void EasyWiFi::loop() {
   if (portalActive) {
     dnsServer.processNextRequest();
     handleClient();
+  } else {
+    if (WiFi.status() != WL_CONNECTED) {
+      unsigned long now = millis();
+
+      if (now - lastReconnectAttempt > reconnectInterval) {
+        lastReconnectAttempt = now;
+        reconnectAttempts++;
+
+        Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
+        WiFi.begin(ssid.c_str(), password.c_str());
+
+        if (reconnectAttempts > maxReconnectAttempts) {
+          Serial.println("EasyWiFi: Too many failures, starting portal");
+          startPortal();
+          reconnectAttempts = 0;
+        }
+      }
+    } else {
+      reconnectAttempts = 0; // reset if wifi is connected
+    }
   }
 }
 
