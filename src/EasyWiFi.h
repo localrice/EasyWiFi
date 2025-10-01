@@ -21,6 +21,9 @@ class EasyWiFi {
         
         // to set Access Point (AP) credentials.
         void setAP(const char* name, const char* password);
+
+        // to set custom CSS file
+        void setCSS(const char* cssUrl);
     private:
         bool portalActive = false;
         String ssid;
@@ -29,6 +32,9 @@ class EasyWiFi {
         // default AP values
         const char* APName = "EasyWiFi setup";
         const char* APPassword = "";
+
+        // optional css by the user
+        const char* userCSS = nullptr;
 
         void tryConnect();
         void startPortal();

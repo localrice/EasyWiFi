@@ -4,6 +4,114 @@ ESP8266WebServer server(80);
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
+const char *defaultCSS = R"rawliteral(
+      <style>
+      body {
+        background: #e0e0e0;
+        font-family: Verdana, sans-serif;
+        color: #111;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        background: #fff;
+        border: 2px solid #000;
+        padding: 15px;
+        max-width: 720px;
+        margin: auto;
+        box-shadow: 4px 4px 0 #000;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0;
+        text-shadow: 1px 1px 0 #fff;
+        text-align: center;
+      }
+      textarea {
+        width: 100%;
+        height: 100px;
+        border: 2px inset #ccc;
+        font-family: monospace;
+        padding: 6px;
+        box-sizing: border-box;
+      }
+      button {
+        background: #c0c0c0;
+        border: 2px outset #fff;
+        padding: 6px 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin-right: 6px;
+      }
+      button:active {
+        border: 2px inset #fff;
+        background: #a0a0a0;
+      }
+      .output {
+        margin-top: 12px;
+        padding: 10px;
+        background: #f9f9f9;
+        border: 2px inset #ccc;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      .encoded {
+        color: #333;
+        font-weight: bold;
+      }
+      /* Center form inputs */
+      form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      input[type=text],
+      input[type=password] {
+        width: 80%;
+        padding: 8px;
+        margin: 5px 0 15px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        text-align: center;
+      }
+      input[type=submit] {
+        width: 50%;
+        padding: 10px;
+        margin-top: 10px;
+        background-color: #808080;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      input[type=submit]:hover {
+        background-color: #606060;
+      }
+      ul {
+        list-style-type: none;
+        padding: 0;
+        max-width: 400px;
+        margin: 10px auto;
+      }
+      li {
+        background: #fff;
+        padding: 8px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      li:hover {
+        background-color: #e9ecef;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 20px 0 10px;
+        text-align: center;
+      }
+      </style>
+)rawliteral";
+
 EasyWiFi::EasyWiFi() {}
 /*
   EasyWiFi Logic Flow:
@@ -92,52 +200,49 @@ void EasyWiFi::startPortal() {
 
   // start DNS server: redirect all domains to our ESP's AP IP
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-  
-  server.on("/", [this]() {
-  String html = R"rawliteral(
-    <html>
-    <head>
-      <title>EasyWiFi Setup</title>
-    </head>
-    <body>
-      <h1>EasyWiFi Setup</h1>
-      
-      <form method='POST' action='/save'>
-        SSID: <input id='ssid' name='ssid'><br>
-        Password: <input type='password' name='password'><br>
-        <input type='submit' value='Save'>
-      </form>
 
-      <h2>Available Networks</h2>
-      <button onclick="scan()">Scan Networks</button>
-      <ul id="networks"></ul>
+  String cssBlock;
 
-      <script>
-        function scan() {
-          fetch('/scan')
-            .then(response => response.json())
-            .then(data => {
-              let list = document.getElementById('networks');
-              list.innerHTML = '';
-              data.forEach(net => {
-                console.log(net)
-                let item = document.createElement('li');
-                item.textContent = net.ssid + " (" + net.rssi + "dBm)";
-                item.style.cursor = "pointer";
+  if (userCSS && strlen(userCSS) > 0) {
+    // link the user-provided css
+    cssBlock = "<link rel='stylesheet' href='" + String(userCSS) + "'>";
+  } else {
+      cssBlock = defaultCSS;
+  }
 
-                item.onclick = () => {
-                  document.getElementById('ssid').value = net.ssid;
-                };
-
-                list.appendChild(item);
-              });
-
-          })
-        }
-      </script>
-    </body>
-    </html>
-  )rawliteral";
+  server.on("/", [this, cssBlock]() {
+  String html = "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>EasyWiFi Setup</title>"
+            + cssBlock +
+            "</head><body><div class='container' style='text-align:center;'>"
+            + "<h1>EasyWiFi Setup</h1> </div>"
+            + "<div class='container'><form method='POST' action='/save'>"
+            + "SSID: <input type='text' id='ssid' name='ssid'><br>"
+            + "Password: <input type='password' name='password'><br>"
+            + "<input type='submit' value='Save'>"
+            + "</form>"
+            + "<h2>Available Networks</h2>"
+            + "<button onclick=\"scan()\">Scan Networks</button>"
+            + "<ul id=\"networks\"></ul>"
+            + "<script>"
+            + "function scan() {"
+            + "fetch('/scan')"
+            + ".then(response => response.json())"
+            + ".then(data => {"
+            + "let list = document.getElementById('networks');"
+            + "list.innerHTML = '';"
+            + "data.forEach(net => {"
+            + "let item = document.createElement('li');"
+            + "item.textContent = net.ssid + ' (' + net.rssi + 'dBm)';"
+            + "item.style.cursor = 'pointer';"
+            + "item.onclick = () => {"
+            + "document.getElementById('ssid').value = net.ssid;"
+            + "};"
+            + "list.appendChild(item);"
+            + "});"
+            + "});"
+            + "}"
+            + "</script>"
+            + "</div></body></html>";
   server.send(200, "text/html", html);
 });
 
@@ -249,4 +354,8 @@ void EasyWiFi::printCredentials() {
 void EasyWiFi::setAP(const char* name, const char* password) {
   APName = name;
   APPassword = password;
+}
+
+void EasyWiFi::setCSS(const char* cssUrl) {
+  userCSS = cssUrl;
 }
