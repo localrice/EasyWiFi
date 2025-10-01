@@ -24,6 +24,9 @@ class EasyWiFi {
 
         // to set custom CSS file
         void setCSS(const char* cssUrl);
+
+        // to set maximum WiFi reconnect attempts and interval (ms)
+        void setReconnectParams(int maxAttempts, unsigned long interval);
     private:
         bool portalActive = false;
         String ssid;
@@ -39,8 +42,8 @@ class EasyWiFi {
         // reconnect handler
         unsigned long lastReconnectAttempt = 0;
         int reconnectAttempts = 0;
-        const int maxReconnectAttempts = 10; // config it
-        const unsigned long reconnectInterval = 5000; // 5 seconds
+        int maxReconnectAttempts = 10; // config it
+        unsigned long reconnectInterval = 5000; // 5 seconds
 
         void tryConnect();
         void startPortal();

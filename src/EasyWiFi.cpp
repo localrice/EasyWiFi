@@ -381,3 +381,8 @@ void EasyWiFi::setAP(const char* name, const char* password) {
 void EasyWiFi::setCSS(const char* cssUrl) {
   userCSS = cssUrl;
 }
+
+void EasyWiFi::setReconnectParams(int maxAttempts, unsigned long interval) {
+  maxReconnectAttempts = maxAttempts;
+  reconnectInterval = interval;
+}
