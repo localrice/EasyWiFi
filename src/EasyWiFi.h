@@ -20,7 +20,7 @@ class EasyWiFi {
         void printCredentials();
         
         // to set Access Point (AP) credentials.
-        void setAP(const char* name, const char* password);
+        void setAP(const char* name, const char* password = "");
 
         // to set custom CSS file
         void setCSS(const char* cssUrl);
