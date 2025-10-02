@@ -27,6 +27,9 @@ class EasyWiFi {
 
         // to set maximum WiFi reconnect attempts and interval (ms)
         void setReconnectParams(int maxAttempts, unsigned long interval);
+
+        // STA mode static IP
+        void setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns = IPAddress(8,8,8,8));
     private:
         bool portalActive = false;
         String ssid;
@@ -44,6 +47,12 @@ class EasyWiFi {
         int reconnectAttempts = 0;
         int maxReconnectAttempts = 10; // config it
         unsigned long reconnectInterval = 5000; // 5 seconds
+
+        bool useStaticIP = false;
+        IPAddress staticIP;
+        IPAddress staticGateway;
+        IPAddress staticSubnet;
+        IPAddress staticDNS;
 
         void tryConnect();
         void startPortal();

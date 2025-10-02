@@ -188,6 +188,15 @@ void EasyWiFi::tryConnect() {
     startPortal();
     return;
   }
+
+  if (useStaticIP) {
+    if (!WiFi.config(staticIP, staticGateway, staticSubnet, staticDNS)) {
+        Serial.println("EasyWiFi: Failed to configure static IP, falling back to DHCP");
+    } else {
+        Serial.printf("EasyWiFi: Using static IP %s\n", staticIP.toString().c_str());
+    }
+  }
+
   Serial.printf("Attempting to connect to SSID: %s\n", ssid.c_str());
   WiFi.begin(ssid.c_str(), password.c_str());
   unsigned long startAttemptTime = millis();
@@ -385,4 +394,12 @@ void EasyWiFi::setCSS(const char* cssUrl) {
 void EasyWiFi::setReconnectParams(int maxAttempts, unsigned long interval) {
   maxReconnectAttempts = maxAttempts;
   reconnectInterval = interval;
+}
+
+void EasyWiFi::setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns) {
+  staticIP = ip;
+  staticGateway = gateway;
+  staticSubnet = subnet;
+  staticDNS = dns;
+  useStaticIP = true;
 }
