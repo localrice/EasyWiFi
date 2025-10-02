@@ -170,6 +170,7 @@ void EasyWiFi::loop() {
         }
       }
     } else {
+      Serial.println("EasyWiFi: Reconnected to WiFi");
       reconnectAttempts = 0; // reset if wifi is connected
     }
   }
