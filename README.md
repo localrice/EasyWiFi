@@ -1,6 +1,6 @@
 # EasyWiFi
 <p align="center">
-    <img src="https://i.ibb.co/B5ZN5WxR/Free-Wifi-Tranparent-Bg-gray-text.png" alt="Free-Wifi-Tranparent-Bg-gray-text" width=250 border="0">
+    <img src="./docs/images/logo.png" alt="EasyWiFi Logo" width="250" border="0">
 </p>
  Library for effortless WiFi management. It supports automatic connection with credential storage, captive portal configuration, and optional static IP—all with minimal code required.
 
