@@ -1,3 +1,16 @@
+/*
+   EasyWiFi Example Sketch
+   -----------------------
+   Demonstrates how to use the EasyWiFi library to:
+   - Configure WiFi credentials via captive portal
+   - Automatically reconnect
+   - Optionally set AP name/password, reconnect params, or static IP
+
+   Library: EasyWiFi
+   Author: Kinjal Kavish Boro (https://github.com/localrice/EasyWiFi)
+   License: MIT
+*/
+
 #include <Arduino.h>
 #include <EasyWiFi.h>
 
