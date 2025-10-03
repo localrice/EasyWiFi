@@ -1,5 +1,7 @@
 # EasyWiFi
-
+<p align="center">
+    <img src="https://i.ibb.co/B5ZN5WxR/Free-Wifi-Tranparent-Bg-gray-text.png" alt="Free-Wifi-Tranparent-Bg-gray-text" width=250 border="0">
+</p>
  Library for effortless WiFi management. It supports automatic connection with credential storage, captive portal configuration, and optional static IP—all with minimal code required.
 
 (This library doesn't try to replace [tzapu/WiFiManager](github.com/tzapu/WiFiManager) but serves as a more simple, barebones and light library)
