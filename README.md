@@ -42,3 +42,6 @@ The EasyWiFi library depends on the following external libraries:
 - setReconnectParams(int maxAttempts, unsigned long interval) – Configure reconnect behavior.
 
 - setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns) – Enable static IP mode
+
+---
+Thanks to [Holorizu](https://github.com/Holorizu) for the logo.
