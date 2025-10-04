@@ -149,11 +149,18 @@ void EasyWiFi::begin() {
 }
 
 void EasyWiFi::loop() {
+  static bool wasConnected = false; //track previous state
+
   if (portalActive) {
     dnsServer.processNextRequest();
     handleClient();
   } else {
     if (WiFi.status() != WL_CONNECTED) {
+      if (wasConnected) {
+        Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
+        wasConnected = false;
+      }
+
       unsigned long now = millis();
 
       if (now - lastReconnectAttempt > reconnectInterval) {
@@ -170,8 +177,11 @@ void EasyWiFi::loop() {
         }
       }
     } else {
-      Serial.println("EasyWiFi: Reconnected to WiFi");
-      reconnectAttempts = 0; // reset if wifi is connected
+        if (!wasConnected) {
+          Serial.println("EasyWiFi: Reconnected to WiFi");
+          wasConnected = true; // only print once when it reconnects
+        }
+        reconnectAttempts = 0; // reset if wifi is connected
     }
   }
 }
