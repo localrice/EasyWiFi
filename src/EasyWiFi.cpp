@@ -1,8 +1,11 @@
 #include "EasyWiFi.h"
+#include <algorithm>
 
 ESP8266WebServer server(80);
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
+
+const char* const EasyWiFi::CREDENTIAL_FILE = "/wifi_credentials.txt";
 
 const char *defaultCSS = R"rawliteral(
       <style>
@@ -145,151 +148,141 @@ void EasyWiFi::begin() {
     return;
   }
   loadCredentials();
+  wasConnected = WiFi.status() == WL_CONNECTED;
   tryConnect();
 }
 
 void EasyWiFi::loop() {
-  static bool wasConnected = false; //track previous state
-
   if (portalActive) {
     dnsServer.processNextRequest();
     handleClient();
-  } else {
-    if (WiFi.status() != WL_CONNECTED) {
-      if (wasConnected) {
-        Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
-        wasConnected = false;
-      }
+    return;
+  }
 
-      unsigned long now = millis();
-
-      if (now - lastReconnectAttempt > reconnectInterval) {
-        lastReconnectAttempt = now;
-        reconnectAttempts++;
-
-        Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
-        WiFi.begin(ssid.c_str(), password.c_str());
-
-        if (reconnectAttempts > maxReconnectAttempts) {
-          Serial.println("EasyWiFi: Too many failures, starting portal");
-          startPortal();
-          reconnectAttempts = 0;
-        }
-      }
-    } else {
-        if (!wasConnected) {
-          Serial.println("EasyWiFi: Reconnected to WiFi");
-          wasConnected = true; // only print once when it reconnects
-        }
-        reconnectAttempts = 0; // reset if wifi is connected
+  const wl_status_t status = WiFi.status();
+  if (status == WL_CONNECTED) {
+    if (!wasConnected) {
+      Serial.println("EasyWiFi: Reconnected to WiFi");
+      wasConnected = true;
+      notifyConnect();
     }
+    reconnectAttempts = 0;
+    return;
+  }
+
+  if (wasConnected) {
+    Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
+    notifyDisconnect();
+    wasConnected = false;
+  }
+
+  const unsigned long now = millis();
+  if (now - lastReconnectAttempt < reconnectInterval) {
+    return;
+  }
+
+  lastReconnectAttempt = now;
+  ++reconnectAttempts;
+
+  if (ssid.length() > 0) {
+    Serial.printf("EasyWiFi: Reconnect attempt %d to SSID: %s\n", reconnectAttempts, ssid.c_str());
+    ensureStationMode();
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
+
+  if (reconnectAttempts > maxReconnectAttempts) {
+    Serial.println("EasyWiFi: Too many failures, cycling saved networks");
+    reconnectAttempts = 0;
+    tryConnect(true);
   }
 }
 
 void EasyWiFi::reset() {
   Serial.println("EasyWiFi: reset()");
-  LittleFS.remove("/wifi_credentials.txt");
+  LittleFS.remove(CREDENTIAL_FILE);
   ssid = "";
   password = "";
+  credentials.clear();
+  activeCredentialIndex = -1;
 }
 
-void EasyWiFi::tryConnect() {
-  if (ssid.length() == 0) {
+void EasyWiFi::tryConnect(bool preferNext) {
+  stopPortal();
+
+  reconnectAttempts = 0;
+  lastReconnectAttempt = millis();
+
+  if (credentials.empty()) {
     Serial.println("No SSID saved, starting portal");
     startPortal();
     return;
   }
 
+  ensureStationMode();
+
   if (useStaticIP) {
     if (!WiFi.config(staticIP, staticGateway, staticSubnet, staticDNS)) {
-        Serial.println("EasyWiFi: Failed to configure static IP, falling back to DHCP");
+      Serial.println("EasyWiFi: Failed to configure static IP, falling back to DHCP");
     } else {
-        Serial.printf("EasyWiFi: Using static IP %s\n", staticIP.toString().c_str());
+      Serial.printf("EasyWiFi: Using static IP %s\n", staticIP.toString().c_str());
     }
   }
 
-  Serial.printf("Attempting to connect to SSID: %s\n", ssid.c_str());
-  WiFi.begin(ssid.c_str(), password.c_str());
-  unsigned long startAttemptTime = millis();
-  const unsigned long timeout = 10000; // 10 seconds timeout
+  const size_t totalNetworks = credentials.size();
+  size_t startIndex = 0;
+  if (activeCredentialIndex >= 0 && static_cast<size_t>(activeCredentialIndex) < totalNetworks) {
+    startIndex = static_cast<size_t>(activeCredentialIndex);
+    if (preferNext && totalNetworks > 1) {
+      startIndex = (startIndex + 1) % totalNetworks;
+    }
+  }
 
-  while ((WiFi.status() != WL_CONNECTED) && (millis() - startAttemptTime < timeout)) {
-    delay(100);
-    Serial.print(".");
+  const unsigned long timeout = 10000; 
+  for (size_t offset = 0; offset < totalNetworks; ++offset) {
+    const size_t index = (startIndex + offset) % totalNetworks;
+    applyActiveCredential(index);
+    if (attemptConnection(credentials[index], timeout)) {
+      return;
+    }
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\nConnected! IP address: %s\n", WiFi.localIP().toString().c_str());
-    portalActive = false;
-  } else {
-    Serial.println("\nFailed to connect, starting portal");
-    startPortal();
-  }
+
+  Serial.println("Failed to connect to any saved network, starting portal");
+  ssid = "";
+  password = "";
+  activeCredentialIndex = -1;
+  wasConnected = false;
+  WiFi.disconnect(false);
+  startPortal();
 }
 void EasyWiFi::startPortal() {
   Serial.println("EasyWiFi: startPortal()");
   WiFi.mode(WIFI_AP);
 
-  // WPA2 requires passwords between 8 and 63 characters
   if (strlen(APPassword) >= 8 && strlen(APPassword) <= 63) {
     WiFi.softAP(APName, APPassword);
     Serial.printf("AP started: %s (secured) \n",APName);
   } else {
-    WiFi.softAP(APName);     // if the password is invalid, start an open AP
+    WiFi.softAP(APName);     
     Serial.printf("AP started: %s (open) \n",APName);
   }
 
-  // start DNS server: redirect all domains to our ESP's AP IP
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
 
   String cssBlock;
 
   if (userCSS && strlen(userCSS) > 0) {
-    // register the route to serve the user-provided CSS from LittleFS
     server.serveStatic("/styles.css", LittleFS, userCSS);
-    // link the user-provided css
     cssBlock = "<link rel='stylesheet' href='" + String(userCSS) + "'>";
   } else {
-      cssBlock = defaultCSS;
+    cssBlock = defaultCSS;
   }
 
   server.on("/", [this, cssBlock]() {
-  String html = "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>EasyWiFi Setup</title>"
-            + cssBlock +
-            "</head><body><div class='container' style='text-align:center;'>"
-            + "<h1>EasyWiFi Setup</h1> </div>"
-            + "<div class='container'><form method='POST' action='/save'>"
-            + "SSID: <input type='text' id='ssid' name='ssid'><br>"
-            + "Password: <input type='password' name='password'><br>"
-            + "<input type='submit' value='Save'>"
-            + "</form>"
-            + "<h2>Available Networks</h2>"
-            + "<button onclick=\"scan()\">Scan Networks</button>"
-            + "<ul id=\"networks\"></ul>"
-            + "<script>"
-            + "function scan() {"
-            + "fetch('/scan')"
-            + ".then(response => response.json())"
-            + ".then(data => {"
-            + "let list = document.getElementById('networks');"
-            + "list.innerHTML = '';"
-            + "data.forEach(net => {"
-            + "let item = document.createElement('li');"
-            + "item.textContent = net.ssid + ' (' + net.rssi + 'dBm)';"
-            + "item.style.cursor = 'pointer';"
-            + "item.onclick = () => {"
-            + "document.getElementById('ssid').value = net.ssid;"
-            + "};"
-            + "list.appendChild(item);"
-            + "});"
-            + "});"
-            + "}"
-            + "</script>"
-            + "</div></body></html>";
-  server.send(200, "text/html", html);
-});
+    String html = buildPortalPage(cssBlock);
+    server.send(200, "text/html", html);
+  });
 
   
-  // Handle form submission
   server.on("/save", HTTP_POST, [this]() {
     String newSsid = server.arg("ssid");
     String newPassword = server.arg("password");
@@ -304,9 +297,8 @@ void EasyWiFi::startPortal() {
     }
   });
   
-  // Handle scanning for networks
   server.on("/scan", [this]() {
-    int networks = WiFi.scanNetworks(); // Returns the number of networks found
+    int networks = WiFi.scanNetworks(); 
     Serial.printf("Scan complete: %d", networks);
     String json = "[";
 
@@ -323,7 +315,6 @@ void EasyWiFi::startPortal() {
     server.send(200, "application/json", json);
   });
 
-  // Captive portal detection endpoints → redirect to "/"
   server.on("/generate_204", []() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
@@ -341,7 +332,6 @@ void EasyWiFi::startPortal() {
     server.send(302, "text/plain", "");
   });
 
-  // Catch-all → redirect to "/"
   server.onNotFound([]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
@@ -351,46 +341,117 @@ void EasyWiFi::startPortal() {
   portalActive = true;
 
   Serial.printf("Portal active. Connect to WiFi 'EasyWiFi_Setup' and visit http://%s/\n",
-                WiFi.softAPIP().toString().c_str()); 
+                WiFi.softAPIP().toString().c_str());
+}
+
+void EasyWiFi::stopPortal() {
+  if (!portalActive) {
+    return;
+  }
+
+  portalActive = false;
+  dnsServer.stop();
+  server.stop();
+  WiFi.softAPdisconnect(true);
 }
 
 void EasyWiFi::handleClient() {
-    // placeholder — will handle web requests later
     server.handleClient();
 }
 
-void EasyWiFi::saveCredentials(const char* ssid, const char* password) {
+void EasyWiFi::saveCredentials(const char* networkSsid, const char* networkPassword) {
   Serial.println("EasyWiFi: saveCredentials()");
-  File file = LittleFS.open("/wifi_credentials.txt", "w");
-  if (!file) {
-    Serial.println("EasyWiFi: Failed to open file for writing");
+  String newSsid = String(networkSsid);
+  String newPassword = String(networkPassword);
+
+  size_t updatedIndex = 0;
+  bool credentialsChanged = true;
+  bool reordered = false;
+  auto it = std::find_if(credentials.begin(), credentials.end(), [&](const Credential& cred) {
+    return cred.ssid == newSsid;
+  });
+
+  if (it != credentials.end()) {
+    updatedIndex = static_cast<size_t>(it - credentials.begin());
+    credentialsChanged = it->password != newPassword;
+    it->password = newPassword;
+    reordered = updatedIndex != 0;
+    if (reordered) {
+      std::rotate(credentials.begin(), credentials.begin() + updatedIndex, credentials.begin() + updatedIndex + 1);
+      updatedIndex = 0;
+    }
+    applyActiveCredential(updatedIndex);
+  } else {
+    credentials.insert(credentials.begin(), {newSsid, newPassword});
+    updatedIndex = 0;
+    applyActiveCredential(updatedIndex);
+  }
+
+  if ((credentialsChanged || reordered) && !persistCredentials()) {
     return;
   }
-  file.println(ssid);
-  file.println(password);
-  file.close();
-  Serial.printf("Saved SSID: %s \n", ssid);
+  Serial.printf("Saved SSID: %s \n", newSsid.c_str());
+  if (onSaveCallback) {
+    onSaveCallback(newSsid, newPassword);
+  }
 }
 
 void EasyWiFi::loadCredentials() {
   Serial.println("EasyWiFi: loadCredentials()");
-  File file = LittleFS.open("/wifi_credentials.txt", "r");
+  credentials.clear();
+  activeCredentialIndex = -1;
+  ssid = "";
+  password = "";
+
+  File file = LittleFS.open(CREDENTIAL_FILE, "r");
   if (!file) {
     Serial.println("EasyWiFi: No saved credentials found");
     return;
   }
-  ssid = file.readStringUntil('\n');
-  ssid.trim();
-  password = file.readStringUntil('\n');
-  password.trim();
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) {
+      continue;
+    }
+
+    int separatorIndex = line.indexOf('\t');
+
+    if (separatorIndex == -1) {
+      String legacyPassword = file.readStringUntil('\n');
+      legacyPassword.trim();
+      if (line.length() > 0) {
+        credentials.push_back({line, legacyPassword});
+      }
+      break; 
+    }
+
+    credentials.push_back({line.substring(0, separatorIndex), line.substring(separatorIndex + 1)});
+  }
+
   file.close();
-  Serial.printf("Loaded SSID: %s \n", ssid.c_str());
+
+  if (!credentials.empty()) {
+    applyActiveCredential(0);
+    Serial.printf("Loaded %u saved network(s). First SSID: %s \n", static_cast<unsigned int>(credentials.size()), ssid.c_str());
+  } else {
+    Serial.println("EasyWiFi: No valid credentials found in file");
+  }
 }
 
 void EasyWiFi::printCredentials() {
   Serial.println("EasyWiFi: printCredentials()");
-  Serial.printf("SSID: %s\n", ssid.c_str());
-  Serial.printf("Password: %s\n", password.c_str());
+  if (credentials.empty()) {
+    Serial.println("No credentials stored");
+    return;
+  }
+
+  for (size_t i = 0; i < credentials.size(); ++i) {
+    const auto &cred = credentials[i];
+    Serial.printf("[%u] SSID: %s\n", static_cast<unsigned>(i), cred.ssid.c_str());
+    Serial.printf("    Password: %s\n", cred.password.c_str());
+  }
 }
 
 void EasyWiFi::setAP(const char* name, const char* password) {
@@ -413,4 +474,105 @@ void EasyWiFi::setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IP
   staticSubnet = subnet;
   staticDNS = dns;
   useStaticIP = true;
+}
+
+void EasyWiFi::setOnConnect(ConnectCallback cb) {
+  onConnectCallback = cb;
+}
+
+void EasyWiFi::setOnDisconnect(DisconnectCallback cb) {
+  onDisconnectCallback = cb;
+}
+
+void EasyWiFi::setOnSave(SaveCallback cb) {
+  onSaveCallback = cb;
+}
+
+void EasyWiFi::notifyConnect() {
+  if (onConnectCallback && WiFi.status() == WL_CONNECTED) {
+    onConnectCallback(ssid, WiFi.localIP());
+  }
+}
+
+void EasyWiFi::notifyDisconnect() {
+  if (onDisconnectCallback) {
+    onDisconnectCallback(ssid);
+  }
+}
+
+void EasyWiFi::applyActiveCredential(size_t index) {
+  if (index >= credentials.size()) {
+    activeCredentialIndex = -1;
+    ssid = "";
+    password = "";
+    return;
+  }
+
+  activeCredentialIndex = static_cast<int>(index);
+  ssid = credentials[index].ssid;
+  password = credentials[index].password;
+}
+
+bool EasyWiFi::attemptConnection(const Credential& cred, unsigned long timeout) {
+  Serial.printf("Attempting to connect to SSID: %s\n", cred.ssid.c_str());
+  ensureStationMode();
+  WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
+
+  const wl_status_t result = static_cast<wl_status_t>(WiFi.waitForConnectResult(timeout));
+
+  if (result == WL_CONNECTED) {
+    Serial.printf("Connected! IP address: %s\n", WiFi.localIP().toString().c_str());
+    stopPortal();
+    wasConnected = true;
+    reconnectAttempts = 0;
+    notifyConnect();
+    return true;
+  }
+
+  Serial.println("Failed to connect");
+  WiFi.disconnect(false);
+  return false;
+}
+
+bool EasyWiFi::persistCredentials() const {
+  File file = LittleFS.open(CREDENTIAL_FILE, "w");
+  if (!file) {
+    Serial.println("EasyWiFi: Failed to open file for writing");
+    return false;
+  }
+
+  for (const auto &cred : credentials) {
+    file.println(cred.ssid + "\t" + cred.password);
+  }
+
+  file.close();
+  return true;
+}
+
+String EasyWiFi::buildPortalPage(const String& cssBlock) const {
+  String html;
+  html.reserve(1024);
+  html += F("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>EasyWiFi Setup</title>");
+  html += cssBlock;
+  html += F("</head><body><div class='container' style='text-align:center;'><h1>EasyWiFi Setup</h1></div>");
+  html += F("<div class='container'><form method='POST' action='/save'>");
+  html += F("SSID: <input type='text' id='ssid' name='ssid'><br>");
+  html += F("Password: <input type='password' name='password'><br>");
+  html += F("<input type='submit' value='Save'>");
+  html += F("</form><h2>Available Networks</h2><button onclick=\"scan()\">Scan Networks</button><ul id='networks'></ul>");
+  html += F("<script>function scan(){fetch('/scan').then(response=>response.json()).then(data=>{let list=document.getElementById('networks');list.innerHTML='';data.forEach(net=>{let item=document.createElement('li');item.textContent=net.ssid+' ('+net.rssi+'dBm)';item.style.cursor='pointer';item.onclick=()=>{document.getElementById('ssid').value=net.ssid;};list.appendChild(item);});});}</script></div></body></html>");
+  return html;
+}
+
+void EasyWiFi::ensureStationMode() {
+  const WiFiMode_t mode = WiFi.getMode();
+  if (mode == WIFI_STA) {
+    return;
+  }
+
+  if (mode == WIFI_AP || mode == WIFI_AP_STA) {
+    WiFi.softAPdisconnect(true);
+  }
+
+  WiFi.mode(WIFI_STA);
 }

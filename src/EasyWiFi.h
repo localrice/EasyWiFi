@@ -6,6 +6,8 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
+#include <vector>
+#include <functional>
 
 class EasyWiFi {
     public:
@@ -15,7 +17,7 @@ class EasyWiFi {
         void loop();
         void reset();
 
-        void saveCredentials(const char* ssid, const char* password);
+        void saveCredentials(const char* networkSsid, const char* networkPassword);
         void loadCredentials();
         void printCredentials();
         
@@ -30,10 +32,20 @@ class EasyWiFi {
 
         // STA mode static IP
         void setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns = IPAddress(8,8,8,8));
+
+        using ConnectCallback = std::function<void(const String&, const IPAddress&)>;
+        using DisconnectCallback = std::function<void(const String&)>;
+        using SaveCallback = std::function<void(const String&, const String&)>;
+
+        void setOnConnect(ConnectCallback cb);
+        void setOnDisconnect(DisconnectCallback cb);
+        void setOnSave(SaveCallback cb);
     private:
         bool portalActive = false;
         String ssid;
         String password;
+
+        bool wasConnected = false;
 
         // default AP values
         const char* APName = "EasyWiFi setup";
@@ -54,9 +66,33 @@ class EasyWiFi {
         IPAddress staticSubnet;
         IPAddress staticDNS;
 
-        void tryConnect();
+        struct Credential {
+            String ssid;
+            String password;
+        };
+
+        static const char* const CREDENTIAL_FILE;
+
+        std::vector<Credential> credentials;
+        int activeCredentialIndex = -1;
+
+        void tryConnect(bool preferNext = false);
         void startPortal();
+        void stopPortal();
         void handleClient();
+
+        void applyActiveCredential(size_t index);
+        bool attemptConnection(const Credential& cred, unsigned long timeout);
+        bool persistCredentials() const;
+        String buildPortalPage(const String& cssBlock) const;
+        void ensureStationMode();
+
+        ConnectCallback onConnectCallback = nullptr;
+        DisconnectCallback onDisconnectCallback = nullptr;
+        SaveCallback onSaveCallback = nullptr;
+
+        void notifyConnect();
+        void notifyDisconnect();
 };
 
 #endif
