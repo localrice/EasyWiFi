@@ -142,9 +142,9 @@ EasyWiFi::EasyWiFi() {}
      - Prints the current SSID and password to Serial.
 */
 void EasyWiFi::begin() {
-  Serial.println("EasyWiFi: begin()");
+ debugPrint("EasyWiFi: begin()"); 
   if (!LittleFS.begin()) {
-    Serial.println("EasyWiFi: Failed to mount LittleFS");
+    debugPrint("EasyWiFi: Failed to mount LittleFS");
     return;
   }
   loadCredentials();
@@ -162,7 +162,7 @@ void EasyWiFi::loop() {
   const wl_status_t status = WiFi.status();
   if (status == WL_CONNECTED) {
     if (!wasConnected) {
-      Serial.println("EasyWiFi: Reconnected to WiFi");
+     debugPrint("EasyWiFi: Reconnected to WiFi");
       wasConnected = true;
       notifyConnect();
     }
@@ -171,7 +171,7 @@ void EasyWiFi::loop() {
   }
 
   if (wasConnected) {
-    Serial.println("EasyWiFi: WiFi lost, attempting reconnect...");
+    debugPrint("EasyWiFi: WiFi lost, attempting reconnect...");
     notifyDisconnect();
     wasConnected = false;
   }
@@ -185,20 +185,20 @@ void EasyWiFi::loop() {
   ++reconnectAttempts;
 
   if (ssid.length() > 0) {
-    Serial.printf("EasyWiFi: Reconnect attempt %d to SSID: %s\n", reconnectAttempts, ssid.c_str());
+    debugPrint("EasyWiFi: Reconnect attempt %d to SSID: %s\n", reconnectAttempts, ssid.c_str());
     ensureStationMode();
     WiFi.begin(ssid.c_str(), password.c_str());
   }
 
   if (reconnectAttempts > maxReconnectAttempts) {
-    Serial.println("EasyWiFi: Too many failures, cycling saved networks");
+   debugPrint("EasyWiFi: Too many failures, cycling saved networks");
     reconnectAttempts = 0;
     tryConnect(true);
   }
 }
 
 void EasyWiFi::reset() {
-  Serial.println("EasyWiFi: reset()");
+ debugPrint("EasyWiFi: reset()");
   LittleFS.remove(CREDENTIAL_FILE);
   ssid = "";
   password = "";
@@ -213,7 +213,7 @@ void EasyWiFi::tryConnect(bool preferNext) {
   lastReconnectAttempt = millis();
 
   if (credentials.empty()) {
-    Serial.println("No SSID saved, starting portal");
+    debugPrint("No SSID saved, starting portal");
     startPortal();
     return;
   }
@@ -222,9 +222,9 @@ void EasyWiFi::tryConnect(bool preferNext) {
 
   if (useStaticIP) {
     if (!WiFi.config(staticIP, staticGateway, staticSubnet, staticDNS)) {
-      Serial.println("EasyWiFi: Failed to configure static IP, falling back to DHCP");
+      debugPrint("EasyWiFi: Failed to configure static IP, falling back to DHCP");
     } else {
-      Serial.printf("EasyWiFi: Using static IP %s\n", staticIP.toString().c_str());
+    debugPrint("EasyWiFi: Using static IP %s\n", staticIP.toString().c_str());
     }
   }
 
@@ -246,7 +246,7 @@ void EasyWiFi::tryConnect(bool preferNext) {
     }
   }
 
-  Serial.println("Failed to connect to any saved network, starting portal");
+ debugPrint("Failed to connect to any saved network, starting portal");
   ssid = "";
   password = "";
   activeCredentialIndex = -1;
@@ -255,15 +255,15 @@ void EasyWiFi::tryConnect(bool preferNext) {
   startPortal();
 }
 void EasyWiFi::startPortal() {
-  Serial.println("EasyWiFi: startPortal()");
+ debugPrint("EasyWiFi: startPortal()");
   WiFi.mode(WIFI_AP);
 
   if (strlen(APPassword) >= 8 && strlen(APPassword) <= 63) {
     WiFi.softAP(APName, APPassword);
-    Serial.printf("AP started: %s (secured) \n",APName);
+    debugPrint("AP started: %s (secured) \n",APName);
   } else {
     WiFi.softAP(APName);     
-    Serial.printf("AP started: %s (open) \n",APName);
+    debugPrint("AP started: %s (open) \n",APName);
   }
 
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
@@ -340,7 +340,7 @@ void EasyWiFi::startPortal() {
   server.begin();
   portalActive = true;
 
-  Serial.printf("Portal active. Connect to WiFi 'EasyWiFi_Setup' and visit http://%s/\n",
+  debugPrint("Portal active. Connect to WiFi 'EasyWiFi_Setup' and visit http://%s/\n",
                 WiFi.softAPIP().toString().c_str());
 }
 
@@ -360,7 +360,7 @@ void EasyWiFi::handleClient() {
 }
 
 void EasyWiFi::saveCredentials(const char* networkSsid, const char* networkPassword) {
-  Serial.println("EasyWiFi: saveCredentials()");
+ debugPrint("EasyWiFi: saveCredentials()");
   String newSsid = String(networkSsid);
   String newPassword = String(networkPassword);
 
@@ -390,14 +390,14 @@ void EasyWiFi::saveCredentials(const char* networkSsid, const char* networkPassw
   if ((credentialsChanged || reordered) && !persistCredentials()) {
     return;
   }
-  Serial.printf("Saved SSID: %s \n", newSsid.c_str());
+  debugPrint("Saved SSID: %s \n", newSsid.c_str());
   if (onSaveCallback) {
     onSaveCallback(newSsid, newPassword);
   }
 }
 
 void EasyWiFi::loadCredentials() {
-  Serial.println("EasyWiFi: loadCredentials()");
+  debugPrint("EasyWiFi: loadCredentials()");
   credentials.clear();
   activeCredentialIndex = -1;
   ssid = "";
@@ -405,7 +405,7 @@ void EasyWiFi::loadCredentials() {
 
   File file = LittleFS.open(CREDENTIAL_FILE, "r");
   if (!file) {
-    Serial.println("EasyWiFi: No saved credentials found");
+    debugPrint("EasyWiFi: No saved credentials found");
     return;
   }
 
@@ -436,21 +436,21 @@ void EasyWiFi::loadCredentials() {
     applyActiveCredential(0);
     Serial.printf("Loaded %u saved network(s). First SSID: %s \n", static_cast<unsigned int>(credentials.size()), ssid.c_str());
   } else {
-    Serial.println("EasyWiFi: No valid credentials found in file");
+    debugPrint("EasyWiFi: No valid credentials found in file");
   }
 }
 
 void EasyWiFi::printCredentials() {
-  Serial.println("EasyWiFi: printCredentials()");
+  debugPrint("EasyWiFi: printCredentials()");
   if (credentials.empty()) {
-    Serial.println("No credentials stored");
+   debugPrint("No credentials stored");
     return;
   }
 
   for (size_t i = 0; i < credentials.size(); ++i) {
     const auto &cred = credentials[i];
-    Serial.printf("[%u] SSID: %s\n", static_cast<unsigned>(i), cred.ssid.c_str());
-    Serial.printf("    Password: %s\n", cred.password.c_str());
+   debugPrint("[%u] SSID: %s\n", static_cast<unsigned>(i), cred.ssid.c_str());
+    debugPrint("    Password: %s\n", cred.password.c_str());
   }
 }
 
@@ -514,14 +514,14 @@ void EasyWiFi::applyActiveCredential(size_t index) {
 }
 
 bool EasyWiFi::attemptConnection(const Credential& cred, unsigned long timeout) {
-  Serial.printf("Attempting to connect to SSID: %s\n", cred.ssid.c_str());
+  debugPrint("Attempting to connect to SSID: %s\n", cred.ssid.c_str());
   ensureStationMode();
   WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
 
   const wl_status_t result = static_cast<wl_status_t>(WiFi.waitForConnectResult(timeout));
 
   if (result == WL_CONNECTED) {
-    Serial.printf("Connected! IP address: %s\n", WiFi.localIP().toString().c_str());
+    debugPrint("Connected! IP address: %s\n", WiFi.localIP().toString().c_str());
     stopPortal();
     wasConnected = true;
     reconnectAttempts = 0;
@@ -529,7 +529,7 @@ bool EasyWiFi::attemptConnection(const Credential& cred, unsigned long timeout) 
     return true;
   }
 
-  Serial.println("Failed to connect");
+  debugPrint("Failed to connect");
   WiFi.disconnect(false);
   return false;
 }
@@ -537,7 +537,7 @@ bool EasyWiFi::attemptConnection(const Credential& cred, unsigned long timeout) 
 bool EasyWiFi::persistCredentials() const {
   File file = LittleFS.open(CREDENTIAL_FILE, "w");
   if (!file) {
-    Serial.println("EasyWiFi: Failed to open file for writing");
+    debugPrint("EasyWiFi: Failed to open file for writing");
     return false;
   }
 
@@ -576,3 +576,30 @@ void EasyWiFi::ensureStationMode() {
 
   WiFi.mode(WIFI_STA);
 }
+
+//Wrapper function for debug message
+void EasyWifi::debugPrint(const char* const debugText){
+  #ifdef DEBUG
+Serial.println(debugText);
+  #endif
+}
+
+//Overloaded functions 
+void EasyWifi::debugPrint(const char* const debugText, const char* const arg1){
+  #ifdef DEBUG
+Serial.printf(debugText,arg1);
+  #endif
+}
+
+void EasyWifi::debugPrint(const char* const debugText, int arg1, const char* const arg2){
+  #ifdef DEBUG
+Serial.printf(debugText,arg1,arg2);
+  #endif
+}
+
+void EasyWifi::debugPrint(const char* const debugText, unsigned int arg1, const char* const arg2){
+  #ifdef DEBUG
+Serial.printf(debugText,arg1,arg2);
+  #endif
+}
+
