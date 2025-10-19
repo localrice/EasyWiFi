@@ -17,7 +17,7 @@ class EasyWiFi {
         void loop();
         void reset();
 
-        void saveCredentials(const char* networkSsid, const char* networkPassword);
+        bool saveCredentials(const char* networkSsid, const char* networkPassword);
         void loadCredentials();
         void printCredentials();
         
@@ -76,6 +76,19 @@ class EasyWiFi {
         std::vector<Credential> credentials;
         int activeCredentialIndex = -1;
 
+        // Server and DNS server as class members to avoid globals
+        ESP8266WebServer server;
+        DNSServer dnsServer;
+
+        // Portal timeout and restart timer
+        unsigned long portalStartTime = 0;
+        unsigned long portalTimeout = 300000; // 5 minutes
+        bool pendingRestart = false;
+        unsigned long restartTime = 0;
+
+        // Encryption key for passwords
+        static const uint8_t ENCRYPTION_KEY;
+
         void tryConnect(bool preferNext = false);
         void startPortal();
         void stopPortal();
@@ -86,6 +99,10 @@ class EasyWiFi {
         bool persistCredentials() const;
         String buildPortalPage(const String& cssBlock) const;
         void ensureStationMode();
+
+        // Encryption functions
+        String encryptPassword(const String& password) const;
+        String decryptPassword(const String& encrypted) const;
 
         ConnectCallback onConnectCallback = nullptr;
         DisconnectCallback onDisconnectCallback = nullptr;
