@@ -52,7 +52,6 @@ class EasyWiFi {
         void setOnConnect(ConnectCallback cb);
         void setOnDisconnect(DisconnectCallback cb);
         void setOnSave(SaveCallback cb);
-
     private:
         bool portalActive = false;
         String ssid;
