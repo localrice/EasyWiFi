@@ -298,8 +298,17 @@ void EasyWiFi::startPortal() {
   });
   
   server.on("/scan", [this]() {
-    int networks = WiFi.scanNetworks(); 
-    Serial.printf("Scan complete: %d", networks);
+    int networks = WiFi.scanNetworks();
+    
+    // Check for scan errors
+    if (networks < 0) {
+      Serial.printf("WiFi scan failed with error code: %d\n", networks);
+      server.send(500, "application/json", 
+                  "{\"error\":\"WiFi scan failed\",\"code\":" + String(networks) + "}");
+      return;
+    }
+    
+    Serial.printf("Scan complete: %d networks found\n", networks);
     String json = "[";
 
     for (int i = 0; i < networks; i++) {
@@ -312,6 +321,7 @@ void EasyWiFi::startPortal() {
     }
     json += "]";
 
+    WiFi.scanDelete(); // Clean up scan results from memory
     server.send(200, "application/json", json);
   });
 
