@@ -4,7 +4,7 @@
 </p>
  Library for effortless WiFi management. It supports automatic connection with credential storage, captive portal configuration, and optional static IP—all with minimal code required.
 
-(This library doesn't try to replace [tzapu/WiFiManager](github.com/tzapu/WiFiManager) but serves as a more simple, barebones and light library)
+(This library doesn't try to replace [tzapu/WiFiManager](https://github.com/tzapu/WiFiManager) but serves as a more simple, barebones and light library)
 
 
 
