@@ -1,10 +1,6 @@
 #include "EasyWiFi.h"
 #include <algorithm>
 
-ESP8266WebServer server(80);
-DNSServer dnsServer;
-const byte DNS_PORT = 53;
-
 const char* const EasyWiFi::CREDENTIAL_FILE = "/wifi_credentials.txt";
 
 const char *defaultCSS = R"rawliteral(
@@ -143,8 +139,8 @@ EasyWiFi::EasyWiFi() {}
 */
 void EasyWiFi::begin() {
   Serial.println("EasyWiFi: begin()");
-  if (!LittleFS.begin()) {
-    Serial.println("EasyWiFi: Failed to mount LittleFS");
+  if (!LittleFS.begin(true)) {
+    Serial.println("EasyWiFi: Failed to mount FS");
     return;
   }
   loadCredentials();
@@ -237,7 +233,7 @@ void EasyWiFi::tryConnect(bool preferNext) {
     }
   }
 
-  const unsigned long timeout = 10000; 
+  const unsigned long timeout = 10000;
   for (size_t offset = 0; offset < totalNetworks; ++offset) {
     const size_t index = (startIndex + offset) % totalNetworks;
     applyActiveCredential(index);
@@ -262,7 +258,7 @@ void EasyWiFi::startPortal() {
     WiFi.softAP(APName, APPassword);
     Serial.printf("AP started: %s (secured) \n",APName);
   } else {
-    WiFi.softAP(APName);     
+    WiFi.softAP(APName);
     Serial.printf("AP started: %s (open) \n",APName);
   }
 
@@ -282,7 +278,7 @@ void EasyWiFi::startPortal() {
     server.send(200, "text/html", html);
   });
 
-  
+
   server.on("/save", HTTP_POST, [this]() {
     String newSsid = server.arg("ssid");
     String newPassword = server.arg("password");
@@ -296,9 +292,9 @@ void EasyWiFi::startPortal() {
       server.send(400, "text/html", "<h1>SSID cannot be empty</h1>");
     }
   });
-  
+
   server.on("/scan", [this]() {
-    int networks = WiFi.scanNetworks(); 
+    int networks = WiFi.scanNetworks();
     Serial.printf("Scan complete: %d", networks);
     String json = "[";
 
@@ -424,7 +420,7 @@ void EasyWiFi::loadCredentials() {
       if (line.length() > 0) {
         credentials.push_back({line, legacyPassword});
       }
-      break; 
+      break;
     }
 
     credentials.push_back({line.substring(0, separatorIndex), line.substring(separatorIndex + 1)});
