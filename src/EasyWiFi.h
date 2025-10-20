@@ -1,13 +1,25 @@
-#ifndef EASYWIFI_H
-#define EASYWIFI_H
+    #ifndef EASYWIFI_H
+    #define EASYWIFI_H
 
-#include <Arduino.h>
-#include <LittleFS.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <DNSServer.h>
-#include <vector>
-#include <functional>
+    #include <Arduino.h>
+    #include <vector>
+    #include <functional>
+
+    #if defined(ESP8266)
+      #include <ESP8266WiFi.h>
+      #include <ESP8266WebServer.h>
+      #include <DNSServer.h>
+      #include <LittleFS.h>
+      using EasyWiFiWebServer = ESP8266WebServer;
+    #elif defined(ESP32)
+        #include <WiFi.h>
+        #include <WebServer.h>
+        #include <DNSServer.h>
+        #include <LittleFS.h>
+        using EasyWiFiWebServer = WebServer;
+    #else
+        #error "EasyWiFi: supports only ESP8266 and ESP32 platforms"
+    #endif
 
 class EasyWiFi {
     public:
@@ -20,7 +32,7 @@ class EasyWiFi {
         void saveCredentials(const char* networkSsid, const char* networkPassword);
         void loadCredentials();
         void printCredentials();
-        
+
         // to set Access Point (AP) credentials.
         void setAP(const char* name, const char* password = "");
 
@@ -40,6 +52,7 @@ class EasyWiFi {
         void setOnConnect(ConnectCallback cb);
         void setOnDisconnect(DisconnectCallback cb);
         void setOnSave(SaveCallback cb);
+
     private:
         bool portalActive = false;
         String ssid;
@@ -75,6 +88,10 @@ class EasyWiFi {
 
         std::vector<Credential> credentials;
         int activeCredentialIndex = -1;
+
+        EasyWiFiWebServer server{80};
+        DNSServer dnsServer;
+        const byte DNS_PORT = 53;
 
         void tryConnect(bool preferNext = false);
         void startPortal();
