@@ -9,6 +9,8 @@
 #include <vector>
 #include <functional>
 
+#define DEBUG     //toggle debug
+
 class EasyWiFi {
     public:
         EasyWiFi();
@@ -93,6 +95,11 @@ class EasyWiFi {
 
         void notifyConnect();
         void notifyDisconnect();
+
+        void debugPrint(const char* const debugText);    //Printing the debug message
+        void debugPrint(const char* const debugText, const char* const arg1);    //(string,string)
+        void debugPrint(const char* const debugText, int arg1, const char* const arg2);   //(string,int,string)
+        void debugPrint(const char* const debugText, unsigned int arg1, const char* const arg2);   //(string,unsigned int, string)
 };
 
 #endif
