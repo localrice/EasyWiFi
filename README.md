@@ -44,4 +44,18 @@ The EasyWiFi library depends on the following external libraries:
 - setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns) – Enable static IP mode
 
 ---
+###  Provisioning Flow
+
+<p align="center">
+  <img src="./docs/images/easywifi_flow.svg" alt="EasyWiFi Provisioning Flow" width="700">
+</p>
+
+This diagram shows the automatic WiFi provisioning process used by EasyWiFi:
+1. The device attempts to load saved credentials from **LittleFS**.
+2. If found, it tries to connect to WiFi.
+3. If not found or connection fails, a **captive portal** is launched.
+4. The user connects to the AP, enters credentials, and they’re stored for future automatic reconnection.
+
+
+---
 Thanks to [Holorizu](https://github.com/Holorizu) for the logo.
