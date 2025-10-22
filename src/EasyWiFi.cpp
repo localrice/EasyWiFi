@@ -1,9 +1,8 @@
 #include "EasyWiFi.h"
 #include <algorithm>
 
-ESP8266WebServer server(80);
-DNSServer dnsServer;
 const byte DNS_PORT = 53;
+
 
 const char* const EasyWiFi::CREDENTIAL_FILE = "/wifi_credentials.txt";
 
@@ -153,7 +152,19 @@ void EasyWiFi::begin() {
 }
 
 void EasyWiFi::loop() {
+  // Handle pending restart
+  if (pendingRestart && millis() >= restartTime) {
+    ESP.restart();
+  }
+
   if (portalActive) {
+    // Check portal timeout
+    if (millis() - portalStartTime > portalTimeout) {
+      Serial.println("EasyWiFi: Portal timeout, stopping portal and retrying connection");
+      stopPortal();
+      tryConnect();
+      return;
+    }
     dnsServer.processNextRequest();
     handleClient();
     return;
@@ -256,13 +267,14 @@ void EasyWiFi::tryConnect(bool preferNext) {
 }
 void EasyWiFi::startPortal() {
   Serial.println("EasyWiFi: startPortal()");
+  portalStartTime = millis();
   WiFi.mode(WIFI_AP);
 
   if (strlen(APPassword) >= 8 && strlen(APPassword) <= 63) {
     WiFi.softAP(APName, APPassword);
     Serial.printf("AP started: %s (secured) \n",APName);
   } else {
-    WiFi.softAP(APName);     
+    WiFi.softAP(APName);
     Serial.printf("AP started: %s (open) \n",APName);
   }
 
@@ -282,18 +294,27 @@ void EasyWiFi::startPortal() {
     server.send(200, "text/html", html);
   });
 
-  
+
   server.on("/save", HTTP_POST, [this]() {
     String newSsid = server.arg("ssid");
     String newPassword = server.arg("password");
 
-    if (newSsid.length() > 0) {
-      saveCredentials(newSsid.c_str(), newPassword.c_str());
+    // Input validation
+    if (newSsid.length() == 0 || newSsid.length() > 32) {
+      server.send(400, "text/html", "<h1>Invalid SSID: Must be 1-32 characters</h1>");
+      return;
+    }
+    if (newPassword.length() > 0 && (newPassword.length() < 8 || newPassword.length() > 63)) {
+      server.send(400, "text/html", "<h1>Invalid Password: Must be 8-63 characters for WPA2</h1>");
+      return;
+    }
+
+    if (saveCredentials(newSsid.c_str(), newPassword.c_str())) {
       server.send(200, "text/html", "<h1>Credentials Saved. Rebooting...</h1>");
-      delay(2000);
-      ESP.restart();
+      pendingRestart = true;
+      restartTime = millis() + 2000; // Non-blocking restart
     } else {
-      server.send(400, "text/html", "<h1>SSID cannot be empty</h1>");
+      server.send(500, "text/html", "<h1>Failed to save credentials</h1>");
     }
   });
   
@@ -388,13 +409,17 @@ void EasyWiFi::saveCredentials(const char* networkSsid, const char* networkPassw
   }
 
   if ((credentialsChanged || reordered) && !persistCredentials()) {
-    return;
+    Serial.println("EasyWiFi: Failed to persist credentials");
+    return false; // Return false on failure
   }
   Serial.printf("Saved SSID: %s \n", newSsid.c_str());
   if (onSaveCallback) {
     onSaveCallback(newSsid, newPassword);
   }
+  return true; // Success
 }
+
+
 
 void EasyWiFi::loadCredentials() {
   Serial.println("EasyWiFi: loadCredentials()");
