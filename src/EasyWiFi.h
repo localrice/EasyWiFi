@@ -4,95 +4,149 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <DNSServer.h>
-#include <vector>
 #include <functional>
 
+// Include modularized components
+#include "CredentialManager.h"
+#include "ConnectionManager.h"
+#include "PortalManager.h"
+#include "CallbackManager.h"
+
+/**
+ * @brief Main EasyWiFi class - Simplified WiFi management for ESP8266
+ * 
+ * Provides easy WiFi connection management with automatic reconnection,
+ * captive portal configuration, and credential storage.
+ * 
+ * This class coordinates between modularized components:
+ * - CredentialManager: Handles credential storage and persistence
+ * - ConnectionManager: Manages WiFi connections and reconnection
+ * - PortalManager: Handles the configuration web portal
+ * - CallbackManager: Manages event callbacks
+ */
 class EasyWiFi {
-    public:
-        EasyWiFi();
+public:
+    EasyWiFi();
 
-        void begin();
-        void loop();
-        void reset();
+    /**
+     * @brief Initialize EasyWiFi and attempt to connect
+     * 
+     * Mounts LittleFS, loads saved credentials, and attempts connection.
+     * If no credentials exist or connection fails, starts the configuration portal.
+     */
+    void begin();
 
-        void saveCredentials(const char* networkSsid, const char* networkPassword);
-        void loadCredentials();
-        void printCredentials();
-        
-        // to set Access Point (AP) credentials.
-        void setAP(const char* name, const char* password = "");
+    /**
+     * @brief Main loop handler - must be called regularly
+     * 
+     * Handles portal requests if active, otherwise manages reconnection logic.
+     */
+    void loop();
 
-        // to set custom CSS file
-        void setCSS(const char* cssUrl);
+    /**
+     * @brief Reset all saved credentials
+     * 
+     * Removes credential file and clears all stored networks.
+     */
+    void reset();
 
-        // to set maximum WiFi reconnect attempts and interval (ms)
-        void setReconnectParams(int maxAttempts, unsigned long interval);
+    /**
+     * @brief Save WiFi credentials
+     * @param networkSsid The network SSID
+     * @param networkPassword The network password
+     */
+    void saveCredentials(const char* networkSsid, const char* networkPassword);
 
-        // STA mode static IP
-        void setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns = IPAddress(8,8,8,8));
+    /**
+     * @brief Load credentials from storage
+     */
+    void loadCredentials();
 
-        using ConnectCallback = std::function<void(const String&, const IPAddress&)>;
-        using DisconnectCallback = std::function<void(const String&)>;
-        using SaveCallback = std::function<void(const String&, const String&)>;
+    /**
+     * @brief Print all stored credentials to Serial
+     */
+    void printCredentials();
+    
+    /**
+     * @brief Set Access Point credentials for configuration portal
+     * @param name AP name
+     * @param password AP password (empty for open network)
+     */
+    void setAP(const char* name, const char* password = "");
 
-        void setOnConnect(ConnectCallback cb);
-        void setOnDisconnect(DisconnectCallback cb);
-        void setOnSave(SaveCallback cb);
-    private:
-        bool portalActive = false;
-        String ssid;
-        String password;
+    /**
+     * @brief Set custom CSS file for portal
+     * @param cssUrl URL to CSS file in LittleFS
+     */
+    void setCSS(const char* cssUrl);
 
-        bool wasConnected = false;
+    /**
+     * @brief Set WiFi reconnection parameters
+     * @param maxAttempts Maximum attempts before cycling networks
+     * @param interval Time between attempts in milliseconds
+     */
+    void setReconnectParams(int maxAttempts, unsigned long interval);
 
-        // default AP values
-        const char* APName = "EasyWiFi setup";
-        const char* APPassword = "";
+    /**
+     * @brief Configure static IP for STA mode
+     * @param ip Static IP address
+     * @param gateway Gateway address
+     * @param subnet Subnet mask
+     * @param dns DNS server (default: 8.8.8.8)
+     */
+    void setStaticIP(IPAddress ip, IPAddress gateway, IPAddress subnet, IPAddress dns = IPAddress(8,8,8,8));
 
-        // optional css by the user
-        const char* userCSS = nullptr;
+    // Callback type definitions (maintained for backward compatibility)
+    using ConnectCallback = std::function<void(const String&, const IPAddress&)>;
+    using DisconnectCallback = std::function<void(const String&)>;
+    using SaveCallback = std::function<void(const String&, const String&)>;
 
-        // reconnect handler
-        unsigned long lastReconnectAttempt = 0;
-        int reconnectAttempts = 0;
-        int maxReconnectAttempts = 10; // config it
-        unsigned long reconnectInterval = 5000; // 5 seconds
+    /**
+     * @brief Set callback for connection events
+     * @param cb Callback function
+     */
+    void setOnConnect(ConnectCallback cb);
 
-        bool useStaticIP = false;
-        IPAddress staticIP;
-        IPAddress staticGateway;
-        IPAddress staticSubnet;
-        IPAddress staticDNS;
+    /**
+     * @brief Set callback for disconnection events
+     * @param cb Callback function
+     */
+    void setOnDisconnect(DisconnectCallback cb);
 
-        struct Credential {
-            String ssid;
-            String password;
-        };
+    /**
+     * @brief Set callback for credential save events
+     * @param cb Callback function
+     */
+    void setOnSave(SaveCallback cb);
 
-        static const char* const CREDENTIAL_FILE;
+private:
+    // Modularized components
+    CredentialManager credentialManager;
+    ConnectionManager connectionManager;
+    PortalManager portalManager;
+    CallbackManager callbackManager;
 
-        std::vector<Credential> credentials;
-        int activeCredentialIndex = -1;
+    // Configuration
+    const char* apName;
+    const char* apPassword;
 
-        void tryConnect(bool preferNext = false);
-        void startPortal();
-        void stopPortal();
-        void handleClient();
+    /**
+     * @brief Try to connect to WiFi
+     * @param preferNext If true, try next network in list
+     */
+    void tryConnect(bool preferNext = false);
 
-        void applyActiveCredential(size_t index);
-        bool attemptConnection(const Credential& cred, unsigned long timeout);
-        bool persistCredentials() const;
-        String buildPortalPage(const String& cssBlock) const;
-        void ensureStationMode();
+    /**
+     * @brief Start the configuration portal
+     */
+    void startPortal();
 
-        ConnectCallback onConnectCallback = nullptr;
-        DisconnectCallback onDisconnectCallback = nullptr;
-        SaveCallback onSaveCallback = nullptr;
-
-        void notifyConnect();
-        void notifyDisconnect();
+    /**
+     * @brief Handle credential save from portal
+     * @param ssid SSID to save
+     * @param password Password to save
+     */
+    void handleCredentialSave(const String& ssid, const String& password);
 };
 
 #endif
